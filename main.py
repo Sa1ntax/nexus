@@ -73,6 +73,7 @@ async def tempban_loop():
 @bot.event
 async def on_ready():
     log.info("Logged in as %s", bot.user)
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="сервер //::Nexus"))
     bot.add_view(VerifyView())
     if not getattr(bot, "_synced", False):
         try:
