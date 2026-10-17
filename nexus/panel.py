@@ -226,6 +226,7 @@ class ListSelect(discord.ui.Select):
             discord.SelectOption(label="Запретить слово", value="word_add"),
             discord.SelectOption(label="Разрешить слово", value="word_del"),
             discord.SelectOption(label="Канал логов", value="log"),
+            discord.SelectOption(label="Хаб приватных комнат", value="voice_hub"),
             discord.SelectOption(label="← Назад", value="back"),
         ]
         super().__init__(placeholder="Выбери…", options=options)
@@ -242,6 +243,7 @@ class ListSelect(discord.ui.Select):
             "word_add": ("word", True),
             "word_del": ("word", False),
             "log": ("log", True),
+            "voice_hub": ("voice_hub", True),
         }[v]
         await i.response.send_modal(TextModal(kind, add))
 
@@ -337,6 +339,7 @@ class TextModal(discord.ui.Modal):
             ("word", True): "Запретить слово",
             ("word", False): "Разрешить слово",
             ("log", True): "ID канала логов",
+            ("voice_hub", True): "ID голосового хаба",
         }
         super().__init__(title=titles.get((kind, add), "Ввод"))
         self.kind = kind
@@ -365,6 +368,15 @@ class TextModal(discord.ui.Modal):
             await ensure_guild_config(i.guild.id)
             await database.db.execute("UPDATE guild_config SET log_channel_id=? WHERE guild_id=?", (v, i.guild.id))
             await i.response.send_message(f"Канал логов: <#{v}>", ephemeral=True)
+        elif self.kind == "voice_hub":
+            if not v.isdigit():
+                await i.response.send_message("Нужен числовой ID голосового канала.", ephemeral=True)
+                return
+            await database.db.execute(
+                "INSERT OR REPLACE INTO voice_config (guild_id, hub_channel_id) VALUES (?, ?)",
+                (i.guild.id, v),
+            )
+            await i.response.send_message(f"Хаб комнат: <#{v}>", ephemeral=True)
 
 
 def setup(bot):

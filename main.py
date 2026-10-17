@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 from nexus.automod import setup as setup_automod
 from nexus.panel import setup as setup_panel
+from nexus.voice import setup as setup_voice, ensure_voice_tables
 from nexus.config_commands import setup as setup_config
 from nexus.database import db, init_db, load_tempbans, remove_tempban
 from nexus.moderation import pending_tempbans, setup as setup_moderation
@@ -114,10 +115,12 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 async def main():
     await init_db()
+    await ensure_voice_tables()
     setup_config(bot)
     setup_moderation(bot)
     setup_automod(bot)
     setup_panel(bot)
+    setup_voice(bot)
     try:
         await bot.start(TOKEN)
     finally:
