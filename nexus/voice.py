@@ -249,13 +249,14 @@ async def create_room(member: discord.Member, hub: discord.VoiceChannel) -> Opti
         await member.move_to(channel)
     except discord.HTTPException:
         log.warning("Could not move %s to new room", member.id)
+    view = RoomControl(member.id, channel.id)
     try:
-        await member.send(
-            f"Твоя комната на **{member.guild.name}** создана: {channel.mention}",
-            view=RoomControl(member.id, channel.id),
+        await channel.send(
+            f"{member.mention}, твоя комната. Управление:",
+            view=view,
         )
     except discord.HTTPException:
-        pass
+        log.warning("Could not send room controls to channel %s", channel.id)
     return channel
 
 
