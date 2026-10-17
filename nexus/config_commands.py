@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Optional
 
 import discord
@@ -8,6 +10,8 @@ from discord import app_commands
 from . import database
 from .database import ensure_guild_config, get_allowed_domains, get_banned_words, get_config, get_ignored_channels, get_whitelist_roles
 from .urlhaus import URLHAUS_AUTH_KEY
+log = logging.getLogger("nexus")
+
 from .utils import config_check, respond
 
 
@@ -62,9 +66,15 @@ class ConfigGroup(app_commands.Group):
         assert interaction.guild and database.db
         await interaction.response.defer(ephemeral=True)
         await ensure_guild_config(interaction.guild.id)
-        await database.db.execute("UPDATE guild_config SET log_channel_id = ? WHERE guild_id = ?", (channel.id, interaction.guild.id))
+        log.info("Saving log channel: id=%s name=%s guild=%s", channel.id, channel.name, interaction.guild.id)
+        await database.db.execute("UPDATE guild_config SET log_channel_id = ? WHERE guild_id = ?", (int(channel.id), interaction.guild.id))
         await database.db.commit()
-        await interaction.followup.send(f"Канал логов: {channel.mention}", ephemeral=True)
+        # verify
+        cur = await database.db.execute("SELECT log_channel_id FROM guild_config WHERE guild_id = ?", (interaction.guild.id,))
+        row = await cur.fetchone()
+        saved = row[0] if row else None
+        log.info("Saved log_channel_id=%s (type=%s)", saved, type(saved))
+        await interaction.followup.send(f"Канал логов: {channel.mention} (ID `{channel.id}`, в базе `{saved}`)", ephemeral=True)
 
     @app_commands.command(name="links")
     @app_commands.check(config_check)
