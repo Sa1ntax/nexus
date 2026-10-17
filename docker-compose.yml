@@ -1,0 +1,10 @@
+services:
+  nexus:
+    build: .
+    container_name: nexus
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    mem_limit: 512m
