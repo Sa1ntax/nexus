@@ -68,56 +68,64 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(label="Ссылки", style=discord.ButtonStyle.secondary, row=0)
     async def toggle_links(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         cfg = await get_config(interaction.guild.id)
         new = 0 if cfg["link_filter_enabled"] else 1
         await database.db.execute("UPDATE guild_config SET link_filter_enabled=? WHERE guild_id=?", (new, interaction.guild.id))
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Антифлуд", style=discord.ButtonStyle.secondary, row=0)
     async def toggle_spam(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         cfg = await get_config(interaction.guild.id)
         new = 0 if cfg["antispam_enabled"] else 1
         await database.db.execute("UPDATE guild_config SET antispam_enabled=? WHERE guild_id=?", (new, interaction.guild.id))
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Слова", style=discord.ButtonStyle.secondary, row=0)
     async def toggle_words(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         cfg = await get_config(interaction.guild.id)
         new = 0 if cfg["word_filter_enabled"] else 1
         await database.db.execute("UPDATE guild_config SET word_filter_enabled=? WHERE guild_id=?", (new, interaction.guild.id))
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Упоминания", style=discord.ButtonStyle.secondary, row=0)
     async def toggle_mentions(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         cfg = await get_config(interaction.guild.id)
         new = 0 if cfg["mention_spam_enabled"] else 1
         await database.db.execute("UPDATE guild_config SET mention_spam_enabled=? WHERE guild_id=?", (new, interaction.guild.id))
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="URLhaus", style=discord.ButtonStyle.secondary, row=1)
     async def toggle_urlhaus(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         cfg = await get_config(interaction.guild.id)
         new = 0 if cfg.get("urlhaus_enabled", True) else 1
         await database.db.execute("UPDATE guild_config SET urlhaus_enabled=? WHERE guild_id=?", (new, interaction.guild.id))
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Верификация", style=discord.ButtonStyle.secondary, row=1)
     async def toggle_verify(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         cfg = await get_config(interaction.guild.id)
         new = 0 if cfg["verify_enabled"] else 1
         await database.db.execute("UPDATE guild_config SET verify_enabled=? WHERE guild_id=?", (new, interaction.guild.id))
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Увед. ссылок", style=discord.ButtonStyle.secondary, row=1)
     async def toggle_notice(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         cfg = await get_config(interaction.guild.id)
         new = 0 if cfg["link_notice_enabled"] else 1
         await database.db.execute("UPDATE guild_config SET link_notice_enabled=? WHERE guild_id=?", (new, interaction.guild.id))
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Обновить", style=discord.ButtonStyle.primary, row=1)
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(embed=await self.build_embed(interaction.guild), view=self)
+        await interaction.response.defer()
+        await interaction.edit_original_response(embed=await self.build_embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Модерация", style=discord.ButtonStyle.danger, row=2)
     async def open_mod(self, interaction: discord.Interaction, button: discord.ui.Button):
