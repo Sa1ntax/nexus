@@ -22,7 +22,7 @@ class MainPanel(discord.ui.View):
         super().__init__(timeout=600)
         self.author_id = author_id
         self.add_item(ModuleSelect(author_id))
-        self.add_item(ActionSelect(author_id))
+        self.add_item(NavSelect(author_id))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
@@ -90,7 +90,7 @@ class ModuleSelect(discord.ui.Select):
         await interaction.edit_original_response(embed=await view.embed(interaction.guild), view=view)
 
 
-class ActionSelect(discord.ui.Select):
+class NavSelect(discord.ui.Select):
     def __init__(self, author_id: int):
         self.author_id = author_id
         options = [
