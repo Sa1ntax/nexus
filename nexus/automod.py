@@ -29,6 +29,14 @@ duplicate_messages: dict[tuple[int, int], deque[tuple[float, str]]] = defaultdic
 mention_counts: dict[tuple[int, int], deque[float]] = defaultdict(deque)
 
 
+
+async def notify_user(member: discord.Member, text: str) -> None:
+    try:
+        await member.send(text)
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+
 def setup(bot):
     @bot.event
     async def on_member_join(member: discord.Member):
@@ -72,6 +80,7 @@ def setup(bot):
                     mark_deleted_by_bot(message.id)
                     await message.delete()
                     await send_log(message.guild, "Удалено запрещённое слово", f"{message.author.mention} в {message.channel.mention}\n{discord.utils.escape_markdown(content)[:500]}", color=discord.Color.orange())
+                    await notify_user(message.author, f"Твоё сообщение в **{message.guild.name}** удалено: запрещённое слово.")
                 except discord.HTTPException:
                     pass
                 return
@@ -112,6 +121,8 @@ def setup(bot):
                         notice = "обнаружена вредоносная ссылка (URLhaus)." if urlhaus_hit else "ссылки не разрешены."
                         await message.channel.send(f"{message.author.mention}, {notice}", delete_after=8, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
                     await send_log(message.guild, title, f"{message.author.mention} в {message.channel.mention}\n{discord.utils.escape_markdown(content)[:800]}", color=color)
+                    dm = "Твоё сообщение удалено: обнаружена вредоносная ссылка." if urlhaus_hit else "Твоё сообщение удалено: ссылки в этом канале не разрешены."
+                    await notify_user(message.author, f"{dm} Сервер: **{message.guild.name}**.")
                 except discord.HTTPException:
                     pass
                 return
@@ -149,6 +160,7 @@ def setup(bot):
                 try:
                     await message.author.timeout(timedelta(minutes=tmin), reason="Nexus: антифлуд")
                     await send_log(message.guild, f"Антифлуд ({tmin} мин)", f"{message.author.mention} в {message.channel.mention}", color=discord.Color.red())
+                    await notify_user(message.author, f"На сервере **{message.guild.name}** тебе выдан таймаут на {tmin} мин за флуд.")
                 except discord.Forbidden:
                     await send_log(message.guild, "Антифлуд: нет прав", f"{message.author.mention}", color=discord.Color.red())
                 recent_messages[key].clear()
