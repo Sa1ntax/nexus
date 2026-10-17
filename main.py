@@ -11,6 +11,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from nexus.automod import setup as setup_automod
+from nexus.panel import setup as setup_panel
 from nexus.config_commands import setup as setup_config
 from nexus.database import db, init_db
 from nexus.moderation import pending_tempbans, setup as setup_moderation
@@ -109,6 +110,7 @@ async def main():
     setup_config(bot)
     setup_moderation(bot)
     setup_automod(bot)
+    setup_panel(bot)
     try:
         await bot.start(TOKEN)
     finally:
