@@ -209,6 +209,46 @@ class RoomSelect(discord.ui.Select):
             await i.response.send_message("Комната удалена.", ephemeral=True)
 
 
+
+REGIONS = [
+    ("auto", "Авто"),
+    ("brazil", "Бразилия"),
+    ("hongkong", "Гонконг"),
+    ("india", "Индия"),
+    ("japan", "Япония"),
+    ("rotterdam", "Роттердам"),
+    ("russia", "Россия"),
+    ("singapore", "Сингапур"),
+    ("sydney", "Сидней"),
+    ("us-central", "США Центр"),
+    ("us-east", "США Восток"),
+    ("us-west", "США Запад"),
+]
+
+class RegionView(discord.ui.View):
+    def __init__(self, channel_id: int, owner_id: int):
+        super().__init__(timeout=60)
+        self.add_item(RegionSelect(channel_id, owner_id))
+
+class RegionSelect(discord.ui.Select):
+    def __init__(self, channel_id: int, owner_id: int):
+        self.channel_id = channel_id
+        options = [discord.SelectOption(label=label, value=value) for value, label in REGIONS]
+        super().__init__(placeholder="Регион…", options=options)
+
+    async def callback(self, i: discord.Interaction):
+        ch = i.guild.get_channel(self.channel_id)
+        if not isinstance(ch, discord.VoiceChannel):
+            await i.response.send_message("Канал не найден.", ephemeral=True)
+            return
+        value = self.values[0]
+        try:
+            await ch.edit(rtc_region=None if value == "auto" else value)
+            await i.response.send_message(f"Регион: {value}.", ephemeral=True)
+        except discord.HTTPException as e:
+            await i.response.send_message(f"Не удалось: {e}", ephemeral=True)
+
+
 class RenameModal(discord.ui.Modal, title="Название комнаты"):
     name = discord.ui.TextInput(label="Название", max_length=100)
 
@@ -338,9 +378,11 @@ def setup(bot: discord.Client):
         # left a managed room and it's empty -> delete
         if before.channel and before.channel.id in active_rooms:
             ch = before.channel
-            if len(ch.members) == 0:
+            humans = [m for m in ch.members if not m.bot]
+            if len(humans) == 0:
+                log.info("Deleting empty room %s", ch.id)
                 try:
                     await ch.delete(reason="Комната пуста")
                 except discord.HTTPException:
-                    pass
+                    log.exception("Failed to delete room %s", ch.id)
                 active_rooms.pop(ch.id, None)
