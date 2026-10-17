@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 
 from . import database
-from .database import count_warnings, get_config
+from .database import add_tempban, count_warnings, get_config, remove_tempban
 from .utils import moderator_check, respond, send_log
 
 pending_tempbans: dict[tuple[int, int], float] = {}

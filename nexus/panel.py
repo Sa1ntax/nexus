@@ -172,6 +172,7 @@ class ActionSelect(discord.ui.Select):
             discord.SelectOption(label="Таймаут", value="timeout"),
             discord.SelectOption(label="Кик", value="kick"),
             discord.SelectOption(label="Бан", value="ban"),
+            discord.SelectOption(label="Временный бан", value="tempban"),
             discord.SelectOption(label="← Другой пользователь", value="back"),
         ]
         super().__init__(placeholder="Выбери действие…", options=options)
@@ -183,6 +184,8 @@ class ActionSelect(discord.ui.Select):
             await i.response.edit_message(embed=view.embed(), view=view)
         elif v == "timeout":
             await i.response.send_modal(TimeoutModal(self.member))
+        elif v == "tempban":
+            await i.response.send_modal(TempbanModal(self.member))
         else:
             titles = {"warn": "Варн", "kick": "Кик", "ban": "Бан"}
             await i.response.send_modal(ReasonModal(v, titles[v], self.member))
@@ -291,6 +294,35 @@ class TimeoutModal(discord.ui.Modal):
             await self.member.timeout(timedelta(minutes=mins), reason=f"{i.user}: {self.reason.value}"[:512])
             await i.response.send_message(f"Таймаут {mins} мин → {self.member.mention}", ephemeral=True)
             await send_log(i.guild, "Timeout", f"{self.member.mention} · {mins} мин", color=discord.Color.red())
+        except discord.Forbidden:
+            await i.response.send_message("Нет прав.", ephemeral=True)
+
+
+
+class TempbanModal(discord.ui.Modal):
+    hours = discord.ui.TextInput(label="Часы", placeholder="24")
+    reason = discord.ui.TextInput(label="Причина", style=discord.TextStyle.paragraph, max_length=400)
+
+    def __init__(self, member: discord.Member):
+        super().__init__(title=f"Временный бан: {member.display_name}")
+        self.member = member
+
+    async def on_submit(self, i: discord.Interaction):
+        if not self.hours.value.isdigit():
+            await i.response.send_message("Часы — число.", ephemeral=True)
+            return
+        hours = max(1, min(int(self.hours.value), 720))
+        reason = self.reason.value[:400]
+        try:
+            await i.guild.ban(self.member, reason=f"{i.user}: tempban {hours}h — {reason}"[:512])
+            from .moderation import pending_tempbans
+            from .database import add_tempban
+            import time
+            expires = time.time() + hours * 3600
+            pending_tempbans[(i.guild.id, self.member.id)] = expires
+            await add_tempban(i.guild.id, self.member.id, expires)
+            await i.response.send_message(f"Временный бан {hours} ч → {self.member}", ephemeral=True)
+            await send_log(i.guild, "Временный бан", f"{self.member} на {hours} ч · {i.user.mention}\n{reason}", color=discord.Color.red())
         except discord.Forbidden:
             await i.response.send_message("Нет прав.", ephemeral=True)
 

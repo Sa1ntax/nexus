@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from nexus.automod import setup as setup_automod
 from nexus.panel import setup as setup_panel
 from nexus.config_commands import setup as setup_config
-from nexus.database import db, init_db
+from nexus.database import db, init_db, load_tempbans, remove_tempban
 from nexus.moderation import pending_tempbans, setup as setup_moderation
 from nexus.urlhaus import URLHAUS_AUTH_KEY, update_urlhaus
 from nexus.utils import respond
@@ -49,6 +49,8 @@ async def urlhaus_loop():
 
 async def tempban_loop():
     await bot.wait_until_ready()
+    pending_tempbans.update(await load_tempbans())
+    log.info("Loaded %s tempbans", len(pending_tempbans))
     while not bot.is_closed():
         now = time.time()
         to_remove = []
@@ -67,6 +69,7 @@ async def tempban_loop():
                 to_remove.append(key)
         for k in to_remove:
             pending_tempbans.pop(k, None)
+            await remove_tempban(guild_id, user_id)
         await asyncio.sleep(30)
 
 

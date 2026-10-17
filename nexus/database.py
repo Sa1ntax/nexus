@@ -124,6 +124,9 @@ async def init_db() -> None:
             guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, PRIMARY KEY (guild_id, user_id))""",
         """CREATE TABLE IF NOT EXISTS banned_words (
             guild_id INTEGER NOT NULL, word TEXT NOT NULL, PRIMARY KEY (guild_id, word))""",
+        """CREATE TABLE IF NOT EXISTS tempbans (
+            guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, expires_at REAL NOT NULL,
+            PRIMARY KEY (guild_id, user_id))""",
     ):
         await db.execute(sql)
 
@@ -213,3 +216,23 @@ async def count_warnings(guild_id: int, user_id: int) -> int:
     )
     row = await cursor.fetchone()
     return row[0] if row else 0
+
+
+async def add_tempban(guild_id: int, user_id: int, expires_at: float) -> None:
+    assert db is not None
+    await db.execute(
+        "INSERT OR REPLACE INTO tempbans (guild_id, user_id, expires_at) VALUES (?, ?, ?)",
+        (guild_id, user_id, expires_at),
+    )
+
+
+async def remove_tempban(guild_id: int, user_id: int) -> None:
+    assert db is not None
+    await db.execute("DELETE FROM tempbans WHERE guild_id=? AND user_id=?", (guild_id, user_id))
+
+
+async def load_tempbans() -> dict[tuple[int, int], float]:
+    assert db is not None
+    cur = await db.execute("SELECT guild_id, user_id, expires_at FROM tempbans")
+    rows = await cur.fetchall()
+    return {(int(r[0]), int(r[1])): float(r[2]) for r in rows}
