@@ -107,6 +107,25 @@ async def remove_whitelist(guild_id: int, owner_id: int, user_id: int) -> None:
     )
 
 
+
+class RoomEntry(discord.ui.View):
+    def __init__(self, owner_id: int, channel_id: int):
+        super().__init__(timeout=None)
+        self.owner_id = owner_id
+        self.channel_id = channel_id
+
+    @discord.ui.button(label="Управление комнатой", style=discord.ButtonStyle.primary, custom_id="vc_open")
+    async def open_panel(self, i: discord.Interaction, b: discord.ui.Button):
+        if i.user.id != self.owner_id:
+            await i.response.send_message("Управление доступно только создателю комнаты.", ephemeral=True)
+            return
+        await i.response.send_message(
+            "Панель твоей комнаты:",
+            view=RoomControl(self.owner_id, self.channel_id),
+            ephemeral=True,
+        )
+
+
 class RoomControl(discord.ui.View):
     def __init__(self, owner_id: int, channel_id: int):
         super().__init__(timeout=None)
@@ -249,14 +268,13 @@ async def create_room(member: discord.Member, hub: discord.VoiceChannel) -> Opti
         await member.move_to(channel)
     except discord.HTTPException:
         log.warning("Could not move %s to new room", member.id)
-    view = RoomControl(member.id, channel.id)
     try:
         await channel.send(
-            f"{member.mention}, твоя комната. Управление:",
-            view=view,
+            f"{member.mention} создал комнату.",
+            view=RoomEntry(member.id, channel.id),
         )
     except discord.HTTPException:
-        log.warning("Could not send room controls to channel %s", channel.id)
+        log.warning("Could not send room entry to channel %s", channel.id)
     return channel
 
 
