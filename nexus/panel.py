@@ -118,12 +118,13 @@ class ModPanel(discord.ui.View):
     def __init__(self, author_id: int):
         super().__init__(timeout=300)
         self.author_id = author_id
-        self.add_item(ModSelect(author_id))
+        self.add_item(MemberSelect(author_id))
+        self.add_item(BackSelect(author_id))
 
     def embed(self) -> discord.Embed:
         return discord.Embed(
             title="Модерация",
-            description="Выбери действие. Потребуется ID пользователя.",
+            description="Выбери пользователя из списка, затем действие.",
             color=0xED4245,
         )
 
@@ -134,28 +135,67 @@ class ModPanel(discord.ui.View):
         return True
 
 
-class ModSelect(discord.ui.Select):
+class MemberSelect(discord.ui.UserSelect):
     def __init__(self, author_id: int):
         self.author_id = author_id
+        super().__init__(placeholder="Выбери пользователя…", min_values=1, max_values=1)
+
+    async def callback(self, i: discord.Interaction):
+        member = self.values[0]
+        view = ActionPanel(self.author_id, member)
+        await i.response.edit_message(
+            embed=discord.Embed(title="Модерация", description=f"Пользователь: {member.mention}", color=0xED4245),
+            view=view,
+        )
+
+
+class ActionPanel(discord.ui.View):
+    def __init__(self, author_id: int, member: discord.Member):
+        super().__init__(timeout=180)
+        self.author_id = author_id
+        self.member = member
+        self.add_item(ActionSelect(author_id, member))
+
+    async def interaction_check(self, i: discord.Interaction) -> bool:
+        if i.user.id != self.author_id:
+            await i.response.send_message("Не твоя панель.", ephemeral=True)
+            return False
+        return True
+
+
+class ActionSelect(discord.ui.Select):
+    def __init__(self, author_id: int, member: discord.Member):
+        self.author_id = author_id
+        self.member = member
         options = [
             discord.SelectOption(label="Варн", value="warn"),
             discord.SelectOption(label="Таймаут", value="timeout"),
             discord.SelectOption(label="Кик", value="kick"),
             discord.SelectOption(label="Бан", value="ban"),
-            discord.SelectOption(label="← Назад", value="back"),
+            discord.SelectOption(label="← Другой пользователь", value="back"),
         ]
         super().__init__(placeholder="Выбери действие…", options=options)
 
     async def callback(self, i: discord.Interaction):
         v = self.values[0]
         if v == "back":
-            view = MainPanel(self.author_id)
-            await i.response.edit_message(embed=await view.embed(i.guild), view=view)
+            view = ModPanel(self.author_id)
+            await i.response.edit_message(embed=view.embed(), view=view)
         elif v == "timeout":
-            await i.response.send_modal(TimeoutModal())
+            await i.response.send_modal(TimeoutModal(self.member))
         else:
             titles = {"warn": "Варн", "kick": "Кик", "ban": "Бан"}
-            await i.response.send_modal(ActionModal(v, titles[v]))
+            await i.response.send_modal(ReasonModal(v, titles[v], self.member))
+
+
+class BackSelect(discord.ui.Select):
+    def __init__(self, author_id: int):
+        self.author_id = author_id
+        super().__init__(placeholder="Навигация…", options=[discord.SelectOption(label="← На главную", value="back")], row=1)
+
+    async def callback(self, i: discord.Interaction):
+        view = MainPanel(self.author_id)
+        await i.response.edit_message(embed=await view.embed(i.guild), view=view)
 
 
 class ListPanel(discord.ui.View):
@@ -203,65 +243,54 @@ class ListSelect(discord.ui.Select):
         await i.response.send_modal(TextModal(kind, add))
 
 
-class ActionModal(discord.ui.Modal):
-    uid = discord.ui.TextInput(label="ID пользователя", placeholder="123456789012345678")
+class ReasonModal(discord.ui.Modal):
     reason = discord.ui.TextInput(label="Причина", style=discord.TextStyle.paragraph, max_length=400)
 
-    def __init__(self, action: str, title: str):
-        super().__init__(title=title)
+    def __init__(self, action: str, title: str, member: discord.Member):
+        super().__init__(title=f"{title}: {member.display_name}")
         self.action = action
+        self.member = member
 
     async def on_submit(self, i: discord.Interaction):
-        if not self.uid.value.isdigit():
-            await i.response.send_message("ID — только цифры.", ephemeral=True)
-            return
-        uid = int(self.uid.value)
-        member = i.guild.get_member(uid)
         reason = self.reason.value[:400]
+        member = self.member
         try:
             if self.action == "warn":
-                if not member:
-                    await i.response.send_message("Нет на сервере.", ephemeral=True)
-                    return
                 await database.db.execute(
                     "INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
-                    (i.guild.id, uid, i.user.id, reason),
+                    (i.guild.id, member.id, i.user.id, reason),
                 )
-                await i.response.send_message(f"Варн → <@{uid}>", ephemeral=True)
-                await send_log(i.guild, "Варн", f"<@{uid}> · {i.user.mention}\n{reason}", color=discord.Color.orange())
-            elif self.action == "kick" and member:
+                await i.response.send_message(f"Варн → {member.mention}", ephemeral=True)
+                await send_log(i.guild, "Варн", f"{member.mention} · {i.user.mention}\n{reason}", color=discord.Color.orange())
+            elif self.action == "kick":
                 await member.kick(reason=f"{i.user}: {reason}"[:512])
                 await i.response.send_message(f"Кик → {member}", ephemeral=True)
                 await send_log(i.guild, "Кик", f"{member} · {i.user.mention}\n{reason}", color=discord.Color.red())
             elif self.action == "ban":
-                user = member or await i.client.fetch_user(uid)
-                await i.guild.ban(user, reason=f"{i.user}: {reason}"[:512])
-                await i.response.send_message(f"Бан → {user}", ephemeral=True)
-                await send_log(i.guild, "Бан", f"{user} · {i.user.mention}\n{reason}", color=discord.Color.red())
-            else:
-                await i.response.send_message("Пользователь не найден.", ephemeral=True)
+                await i.guild.ban(member, reason=f"{i.user}: {reason}"[:512])
+                await i.response.send_message(f"Бан → {member}", ephemeral=True)
+                await send_log(i.guild, "Бан", f"{member} · {i.user.mention}\n{reason}", color=discord.Color.red())
         except discord.Forbidden:
             await i.response.send_message("Нет прав.", ephemeral=True)
 
 
-class TimeoutModal(discord.ui.Modal, title="Таймаут"):
-    uid = discord.ui.TextInput(label="ID пользователя")
+class TimeoutModal(discord.ui.Modal):
     minutes = discord.ui.TextInput(label="Минуты", placeholder="10")
     reason = discord.ui.TextInput(label="Причина", required=False)
 
+    def __init__(self, member: discord.Member):
+        super().__init__(title=f"Таймаут: {member.display_name}")
+        self.member = member
+
     async def on_submit(self, i: discord.Interaction):
-        if not (self.uid.value.isdigit() and self.minutes.value.isdigit()):
-            await i.response.send_message("ID и минуты — числа.", ephemeral=True)
-            return
-        member = i.guild.get_member(int(self.uid.value))
-        if not member:
-            await i.response.send_message("Нет на сервере.", ephemeral=True)
+        if not self.minutes.value.isdigit():
+            await i.response.send_message("Минуты — число.", ephemeral=True)
             return
         mins = max(1, min(int(self.minutes.value), 40320))
         try:
-            await member.timeout(timedelta(minutes=mins), reason=f"{i.user}: {self.reason.value}"[:512])
-            await i.response.send_message(f"Таймаут {mins} мин → {member.mention}", ephemeral=True)
-            await send_log(i.guild, "Timeout", f"{member.mention} · {mins} мин", color=discord.Color.red())
+            await self.member.timeout(timedelta(minutes=mins), reason=f"{i.user}: {self.reason.value}"[:512])
+            await i.response.send_message(f"Таймаут {mins} мин → {self.member.mention}", ephemeral=True)
+            await send_log(i.guild, "Timeout", f"{self.member.mention} · {mins} мин", color=discord.Color.red())
         except discord.Forbidden:
             await i.response.send_message("Нет прав.", ephemeral=True)
 
