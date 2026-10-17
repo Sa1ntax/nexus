@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import discord
+import logging
+log = logging.getLogger("nexus")
 from discord import app_commands
 
 from .database import get_allowed_domains, get_banned_words, get_config, get_ignored_channels, is_whitelisted
@@ -32,9 +34,13 @@ mention_counts: dict[tuple[int, int], deque[float]] = defaultdict(deque)
 
 async def notify_user(member: discord.Member, text: str) -> None:
     try:
-        await member.send(text)
-    except (discord.Forbidden, discord.HTTPException):
-        pass
+        dm = member.dm_channel or await member.create_dm()
+        await dm.send(text)
+        log.info("DM sent to %s", member.id)
+    except discord.Forbidden:
+        log.warning("Cannot DM %s (forbidden / DMs closed)", member.id)
+    except discord.HTTPException as e:
+        log.warning("DM to %s failed: %s", member.id, e)
 
 
 def setup(bot):
