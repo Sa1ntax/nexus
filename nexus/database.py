@@ -31,7 +31,9 @@ class TursoDB:
         self._lock = asyncio.Lock()
 
     async def execute(self, sql: str, params: tuple | list = ()) -> TursoResult:
-        args = list(params) if params else []
+        # Discord snowflakes are 64-bit; some drivers corrupt them as floats.
+        # Pass integers as strings to preserve exact value.
+        args = [str(p) if isinstance(p, int) and p > 2**53 else p for p in (params or [])]
         async with self._lock:
             def _run():
                 cur = self.conn.execute(sql, args)
