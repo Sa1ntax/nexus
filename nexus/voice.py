@@ -128,47 +128,177 @@ class RoomEntry(discord.ui.View):
 
 class RoomControl(discord.ui.View):
     def __init__(self, owner_id: int, channel_id: int):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)
         self.owner_id = owner_id
         self.channel_id = channel_id
 
-    async def interaction_check(self, i: discord.Interaction) -> bool:
-        if i.user.id != self.owner_id:
-            await i.response.send_message("Это не твоя комната.", ephemeral=True)
-            return False
-        return True
+    async def _ch(self, i: discord.Interaction) -> discord.VoiceChannel | None:
+        ch = i.guild.get_channel(self.channel_id)
+        return ch if isinstance(ch, discord.VoiceChannel) else None
 
-    @discord.ui.button(label="Переименовать", style=discord.ButtonStyle.secondary, custom_id="vc_rename")
+    @discord.ui.button(label="Название", style=discord.ButtonStyle.secondary, emoji="✏️", row=0)
     async def rename(self, i: discord.Interaction, b: discord.ui.Button):
         await i.response.send_modal(RenameModal(self.channel_id, self.owner_id))
 
-    @discord.ui.button(label="Лимит", style=discord.ButtonStyle.secondary, custom_id="vc_limit")
+    @discord.ui.button(label="Лимит", style=discord.ButtonStyle.secondary, emoji="👥", row=0)
     async def limit(self, i: discord.Interaction, b: discord.ui.Button):
         await i.response.send_modal(LimitModal(self.channel_id, self.owner_id))
 
-    @discord.ui.button(label="Закрыть/Открыть", style=discord.ButtonStyle.primary, custom_id="vc_lock")
+    @discord.ui.button(label="Битрейт", style=discord.ButtonStyle.secondary, emoji="🔊", row=0)
+    async def bitrate(self, i: discord.Interaction, b: discord.ui.Button):
+        await i.response.send_modal(BitrateModal(self.channel_id, self.owner_id))
+
+    @discord.ui.button(label="Регион", style=discord.ButtonStyle.secondary, emoji="🌍", row=0)
+    async def region(self, i: discord.Interaction, b: discord.ui.Button):
+        await i.response.send_message("Выбери регион:", view=RegionView(self.channel_id, self.owner_id), ephemeral=True)
+
+    @discord.ui.button(label="Закрыть", style=discord.ButtonStyle.primary, emoji="🔒", row=1)
     async def lock(self, i: discord.Interaction, b: discord.ui.Button):
-        ch = i.guild.get_channel(self.channel_id)
-        if not isinstance(ch, discord.VoiceChannel):
+        ch = await self._ch(i)
+        if not ch:
             await i.response.send_message("Канал не найден.", ephemeral=True)
             return
-        settings = await get_user_voice_settings(i.guild.id, self.owner_id)
-        locked = not settings["locked"]
-        await save_user_voice_settings(i.guild.id, self.owner_id, locked=locked)
-        await apply_permissions(ch, i.guild.get_member(self.owner_id), locked)
-        await i.response.send_message("Комната закрыта." if locked else "Комната открыта.", ephemeral=True)
+        await save_user_voice_settings(i.guild.id, self.owner_id, locked=True)
+        await apply_permissions(ch, i.guild.get_member(self.owner_id), True)
+        await i.response.send_message("Комната закрыта.", ephemeral=True)
 
-    @discord.ui.button(label="+ В белый список", style=discord.ButtonStyle.success, custom_id="vc_wl_add")
-    async def wl_add(self, i: discord.Interaction, b: discord.ui.Button):
-        await i.response.send_message("Выбери пользователя:", view=WhitelistAddView(self.owner_id, self.channel_id), ephemeral=True)
+    @discord.ui.button(label="Открыть", style=discord.ButtonStyle.primary, emoji="🔓", row=1)
+    async def unlock(self, i: discord.Interaction, b: discord.ui.Button):
+        ch = await self._ch(i)
+        if not ch:
+            await i.response.send_message("Канал не найден.", ephemeral=True)
+            return
+        await save_user_voice_settings(i.guild.id, self.owner_id, locked=False)
+        await apply_permissions(ch, i.guild.get_member(self.owner_id), False)
+        await i.response.send_message("Комната открыта.", ephemeral=True)
 
-    @discord.ui.button(label="Удалить комнату", style=discord.ButtonStyle.danger, custom_id="vc_delete")
+    @discord.ui.button(label="Скрыть", style=discord.ButtonStyle.secondary, emoji="🙈", row=1)
+    async def hide(self, i: discord.Interaction, b: discord.ui.Button):
+        ch = await self._ch(i)
+        if not ch:
+            await i.response.send_message("Канал не найден.", ephemeral=True)
+            return
+        ow = ch.overwrites_for(i.guild.default_role)
+        ow.view_channel = False
+        await ch.set_permissions(i.guild.default_role, overwrite=ow)
+        await i.response.send_message("Комната скрыта.", ephemeral=True)
+
+    @discord.ui.button(label="Показать", style=discord.ButtonStyle.secondary, emoji="👁️", row=1)
+    async def unhide(self, i: discord.Interaction, b: discord.ui.Button):
+        ch = await self._ch(i)
+        if not ch:
+            await i.response.send_message("Канал не найден.", ephemeral=True)
+            return
+        ow = ch.overwrites_for(i.guild.default_role)
+        ow.view_channel = True
+        await ch.set_permissions(i.guild.default_role, overwrite=ow)
+        await i.response.send_message("Комната видна.", ephemeral=True)
+
+    @discord.ui.button(label="Пустить", style=discord.ButtonStyle.success, emoji="✅", row=2)
+    async def allow(self, i: discord.Interaction, b: discord.ui.Button):
+        await i.response.send_message("Кого пустить:", view=WhitelistAddView(self.owner_id, self.channel_id), ephemeral=True)
+
+    @discord.ui.button(label="Выгнать", style=discord.ButtonStyle.danger, emoji="🚫", row=2)
+    async def kick_user(self, i: discord.Interaction, b: discord.ui.Button):
+        await i.response.send_message("Кого выгнать:", view=KickFromRoomView(self.owner_id, self.channel_id), ephemeral=True)
+
+    @discord.ui.button(label="Удалить", style=discord.ButtonStyle.danger, emoji="🗑️", row=2)
     async def delete(self, i: discord.Interaction, b: discord.ui.Button):
-        ch = i.guild.get_channel(self.channel_id)
+        ch = await self._ch(i)
         if ch:
             await ch.delete(reason="Владелец удалил комнату")
         active_rooms.pop(self.channel_id, None)
         await i.response.send_message("Комната удалена.", ephemeral=True)
+
+
+REGIONS = [
+    ("auto", "Авто"),
+    ("brazil", "Бразилия"),
+    ("hongkong", "Гонконг"),
+    ("india", "Индия"),
+    ("japan", "Япония"),
+    ("rotterdam", "Роттердам"),
+    ("russia", "Россия"),
+    ("singapore", "Сингапур"),
+    ("southafrica", "ЮАР"),
+    ("sydney", "Сидней"),
+    ("us-central", "США Центр"),
+    ("us-east", "США Восток"),
+    ("us-south", "США Юг"),
+    ("us-west", "США Запад"),
+]
+
+
+class RegionView(discord.ui.View):
+    def __init__(self, channel_id: int, owner_id: int):
+        super().__init__(timeout=60)
+        self.add_item(RegionSelect(channel_id, owner_id))
+
+
+class RegionSelect(discord.ui.Select):
+    def __init__(self, channel_id: int, owner_id: int):
+        self.channel_id = channel_id
+        self.owner_id = owner_id
+        options = [discord.SelectOption(label=label, value=value) for value, label in REGIONS]
+        super().__init__(placeholder="Регион…", options=options)
+
+    async def callback(self, i: discord.Interaction):
+        ch = i.guild.get_channel(self.channel_id)
+        if not isinstance(ch, discord.VoiceChannel):
+            await i.response.send_message("Канал не найден.", ephemeral=True)
+            return
+        value = self.values[0]
+        rtc = None if value == "auto" else value
+        try:
+            await ch.edit(rtc_region=rtc)
+            await i.response.send_message(f"Регион: {value}.", ephemeral=True)
+        except discord.HTTPException as e:
+            await i.response.send_message(f"Не удалось сменить регион: {e}", ephemeral=True)
+
+
+class BitrateModal(discord.ui.Modal, title="Битрейт"):
+    kbps = discord.ui.TextInput(label="Кбит/с (8–384)", placeholder="64")
+
+    def __init__(self, channel_id: int, owner_id: int):
+        super().__init__()
+        self.channel_id = channel_id
+        self.owner_id = owner_id
+
+    async def on_submit(self, i: discord.Interaction):
+        if not self.kbps.value.isdigit():
+            await i.response.send_message("Нужно число.", ephemeral=True)
+            return
+        bps = max(8000, min(int(self.kbps.value) * 1000, i.guild.bitrate_limit))
+        ch = i.guild.get_channel(self.channel_id)
+        if isinstance(ch, discord.VoiceChannel):
+            await ch.edit(bitrate=bps)
+            await save_user_voice_settings(i.guild.id, self.owner_id, bitrate=bps)
+            await i.response.send_message(f"Битрейт: {bps // 1000} кбит/с.", ephemeral=True)
+        else:
+            await i.response.send_message("Канал не найден.", ephemeral=True)
+
+
+class KickFromRoomView(discord.ui.View):
+    def __init__(self, owner_id: int, channel_id: int):
+        super().__init__(timeout=60)
+        self.add_item(KickSelect(owner_id, channel_id))
+
+
+class KickSelect(discord.ui.UserSelect):
+    def __init__(self, owner_id: int, channel_id: int):
+        super().__init__(placeholder="Кого выгнать…")
+        self.owner_id = owner_id
+        self.channel_id = channel_id
+
+    async def callback(self, i: discord.Interaction):
+        user = self.values[0]
+        ch = i.guild.get_channel(self.channel_id)
+        if isinstance(ch, discord.VoiceChannel) and isinstance(user, discord.Member) and user.voice and user.voice.channel == ch:
+            await user.move_to(None)
+            await ch.set_permissions(user, connect=False)
+            await i.response.send_message(f"{user.mention} выгнан.", ephemeral=True)
+        else:
+            await i.response.send_message("Пользователь не в этой комнате.", ephemeral=True)
 
 
 class RenameModal(discord.ui.Modal, title="Название комнаты"):
