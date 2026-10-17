@@ -279,4 +279,4 @@ class ConfigGroup(app_commands.Group):
         await respond(interaction, f"URLhaus: {len(urlhaus_hosts)} хостов, {len(urlhaus_urls)} URL. Обновление: {age_s}.")
 
 def setup(bot: discord.Client):
-    bot.tree.add_command(ConfigGroup())
+    pass  # commands moved to /panel

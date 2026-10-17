@@ -188,17 +188,3 @@ def setup(bot):
         if not before.guild or before.author.bot or before.content == after.content:
             return
         await send_log(before.guild, "Сообщение изменено", f"{before.author.mention} в {before.channel.mention}\nДо: {discord.utils.escape_markdown(before.content or '')[:600]}\nПосле: {discord.utils.escape_markdown(after.content or '')[:600]}")
-
-    @bot.tree.command(name="setup_verify")
-    @app_commands.check(config_check)
-    async def setup_verify(interaction: discord.Interaction):
-        assert interaction.guild
-        cfg = await get_config(interaction.guild.id)
-        if not cfg["verify_role_id"]:
-            await interaction.response.send_message("Сначала задай роль верификации через /config verify.", ephemeral=True)
-            return
-        if not isinstance(interaction.channel, discord.TextChannel):
-            await interaction.response.send_message("Команда работает только в текстовых каналах.", ephemeral=True)
-            return
-        await interaction.response.send_message("Кнопка верификации отправлена.", ephemeral=True)
-        await interaction.channel.send("Нажми кнопку, чтобы пройти верификацию и получить доступ.", view=VerifyView())
