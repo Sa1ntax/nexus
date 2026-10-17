@@ -19,23 +19,26 @@ async def send_log(guild: discord.Guild, title: str, description: str, *, color:
     try:
         config = await get_config(guild.id)
         channel_id = config["log_channel_id"]
+        log.info("send_log: guild=%s channel_id=%s title=%s", guild.id, channel_id, title)
         if not channel_id:
-            log.warning("Log channel not set for guild %s", guild.id)
+            log.warning("Log channel not set")
             return
-        channel = guild.get_channel(channel_id)
+        channel = guild.get_channel(int(channel_id))
         if channel is None:
+            log.info("Channel %s not in cache, fetching...", channel_id)
             try:
-                channel = await guild.fetch_channel(channel_id)
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                log.warning("Could not fetch log channel %s in guild %s", channel_id, guild.id)
+                channel = await guild.fetch_channel(int(channel_id))
+            except Exception as e:
+                log.warning("fetch_channel failed: %s", e)
                 return
         if not isinstance(channel, (discord.TextChannel, discord.Thread)):
-            log.warning("Log channel %s is not a text channel", channel_id)
+            log.warning("Channel %s is %s, not text", channel_id, type(channel))
             return
         embed = discord.Embed(title=title, description=description[:4000], color=color, timestamp=datetime.now(timezone.utc))
-        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-    except (discord.Forbidden, discord.HTTPException):
-        log.exception("Could not send a moderation log for guild %s", guild.id)
+        msg = await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        log.info("Log sent to #%s (msg %s)", channel.name, msg.id)
+    except Exception:
+        log.exception("send_log failed")
 
 
 def is_moderator(interaction: discord.Interaction) -> bool:
