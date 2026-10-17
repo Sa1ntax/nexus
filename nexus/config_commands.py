@@ -24,7 +24,11 @@ class ConfigGroup(app_commands.Group):
         ignored = await get_ignored_channels(interaction.guild.id)
         wl_roles = await get_whitelist_roles(interaction.guild.id)
         words = sorted(await get_banned_words(interaction.guild.id))
-        channel = f"<#{cfg['log_channel_id']}>" if cfg["log_channel_id"] else "не задан"
+        if cfg["log_channel_id"]:
+            ch = interaction.guild.get_channel(cfg["log_channel_id"])
+            channel = f"{ch.mention} (`{cfg['log_channel_id']}`)" if ch else f"ID `{cfg['log_channel_id']}` (бот не видит канал)"
+        else:
+            channel = "не задан"
         vrole = f"<@&{cfg['verify_role_id']}>" if cfg["verify_role_id"] else "не задана"
         vchan = f"<#{cfg['verify_channel_id']}>" if cfg["verify_channel_id"] else "не задан"
         uh = "вкл" if cfg.get("urlhaus_enabled") else "выкл"
