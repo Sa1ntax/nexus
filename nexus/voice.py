@@ -119,38 +119,61 @@ class RoomEntry(discord.ui.View):
         if i.user.id != self.owner_id:
             await i.response.send_message("Управление доступно только создателю комнаты.", ephemeral=True)
             return
-        view = RoomControl(self.owner_id, self.channel_id)
+        view = await RoomControl.create(i.guild, self.owner_id, self.channel_id)
         await i.response.send_message(embed=view.embed(), view=view, ephemeral=True)
 
 
 class RoomControl(discord.ui.View):
-    def __init__(self, owner_id: int, channel_id: int):
+    def __init__(self, owner_id: int, channel_id: int, locked: bool = True, hidden: bool = False):
         super().__init__(timeout=300)
         self.owner_id = owner_id
         self.channel_id = channel_id
-        self.add_item(RoomSelect(owner_id, channel_id))
+        self.locked = locked
+        self.hidden = hidden
+        self.add_item(RoomSelect(owner_id, channel_id, locked, hidden))
 
     def embed(self) -> discord.Embed:
+        state = []
+        state.append("закрыта" if self.locked else "открыта")
+        state.append("скрыта" if self.hidden else "видна")
         return discord.Embed(
             title="Комната",
-            description="Выбери действие.",
+            description=" · ".join(state),
             color=0x2B2D31,
         )
 
+    @classmethod
+    async def create(cls, guild: discord.Guild, owner_id: int, channel_id: int):
+        settings = await get_user_voice_settings(guild.id, owner_id)
+        ch = guild.get_channel(channel_id)
+        hidden = False
+        if isinstance(ch, discord.VoiceChannel):
+            ow = ch.overwrites_for(guild.default_role)
+            hidden = ow.view_channel is False
+        return cls(owner_id, channel_id, locked=settings["locked"], hidden=hidden)
+
 
 class RoomSelect(discord.ui.Select):
-    def __init__(self, owner_id: int, channel_id: int):
+    def __init__(self, owner_id: int, channel_id: int, locked: bool, hidden: bool):
         self.owner_id = owner_id
         self.channel_id = channel_id
+        self.locked = locked
+        self.hidden = hidden
         options = [
             discord.SelectOption(label="Название", value="rename", description="Переименовать комнату"),
             discord.SelectOption(label="Лимит", value="limit", description="Максимум участников"),
             discord.SelectOption(label="Битрейт", value="bitrate", description="Качество звука"),
             discord.SelectOption(label="Регион", value="region", description="Голосовой регион"),
-            discord.SelectOption(label="Закрыть", value="lock", description="Только по приглашению"),
-            discord.SelectOption(label="Открыть", value="unlock", description="Могут заходить все"),
-            discord.SelectOption(label="Скрыть", value="hide", description="Скрыть из списка каналов"),
-            discord.SelectOption(label="Показать", value="unhide", description="Снова показать канал"),
+        ]
+        if locked:
+            options.append(discord.SelectOption(label="Открыть", value="unlock", description="Разрешить вход всем"))
+        else:
+            options.append(discord.SelectOption(label="Закрыть", value="lock", description="Только по приглашению"))
+        if hidden:
+            options.append(discord.SelectOption(label="Показать", value="unhide", description="Снова показать канал"))
+        else:
+            options.append(discord.SelectOption(label="Скрыть", value="hide", description="Скрыть из списка каналов"))
+        options += [
             discord.SelectOption(label="Пустить", value="allow", description="Добавить в белый список"),
             discord.SelectOption(label="Выгнать", value="kick", description="Убрать из комнаты"),
             discord.SelectOption(label="Удалить", value="delete", description="Удалить комнату"),
@@ -188,21 +211,25 @@ class RoomSelect(discord.ui.Select):
         if v == "lock":
             await save_user_voice_settings(i.guild.id, self.owner_id, locked=True)
             await apply_permissions(ch, i.guild.get_member(self.owner_id), True)
-            await i.response.send_message("Комната закрыта.", ephemeral=True)
+            view = await RoomControl.create(i.guild, self.owner_id, self.channel_id)
+            await i.response.edit_message(embed=view.embed(), view=view)
         elif v == "unlock":
             await save_user_voice_settings(i.guild.id, self.owner_id, locked=False)
             await apply_permissions(ch, i.guild.get_member(self.owner_id), False)
-            await i.response.send_message("Комната открыта.", ephemeral=True)
+            view = await RoomControl.create(i.guild, self.owner_id, self.channel_id)
+            await i.response.edit_message(embed=view.embed(), view=view)
         elif v == "hide":
             ow = ch.overwrites_for(i.guild.default_role)
             ow.view_channel = False
             await ch.set_permissions(i.guild.default_role, overwrite=ow)
-            await i.response.send_message("Комната скрыта.", ephemeral=True)
+            view = await RoomControl.create(i.guild, self.owner_id, self.channel_id)
+            await i.response.edit_message(embed=view.embed(), view=view)
         elif v == "unhide":
             ow = ch.overwrites_for(i.guild.default_role)
             ow.view_channel = True
             await ch.set_permissions(i.guild.default_role, overwrite=ow)
-            await i.response.send_message("Комната видна.", ephemeral=True)
+            view = await RoomControl.create(i.guild, self.owner_id, self.channel_id)
+            await i.response.edit_message(embed=view.embed(), view=view)
         elif v == "delete":
             try:
                 await ch.delete(reason="Владелец удалил комнату")
