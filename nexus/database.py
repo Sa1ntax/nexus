@@ -23,26 +23,47 @@ class TursoResult:
         return self.rows
 
 
+def _connect():
+    return libsql.connect(database=TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+
+
 class TursoDB:
-    """Async wrapper around the sync libsql client."""
+    """Async wrapper around the sync libsql client with reconnect."""
 
     def __init__(self, conn: libsql.Connection):
         self.conn = conn
         self._lock = asyncio.Lock()
 
+    def _reconnect(self) -> None:
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+        self.conn = _connect()
+
     async def execute(self, sql: str, params: tuple | list = ()) -> TursoResult:
         # Discord snowflakes are 64-bit; some drivers corrupt them as floats.
-        # Pass integers as strings to preserve exact value.
         args = [str(p) if isinstance(p, int) and p > 2**53 else p for p in (params or [])]
         async with self._lock:
             def _run():
-                cur = self.conn.execute(sql, args)
-                try:
-                    rows = cur.fetchall()
-                except Exception:
-                    rows = []
-                self.conn.commit()
-                return rows
+                last = None
+                for attempt in range(2):
+                    try:
+                        cur = self.conn.execute(sql, args)
+                        try:
+                            rows = cur.fetchall()
+                        except Exception:
+                            rows = []
+                        self.conn.commit()
+                        return rows
+                    except Exception as e:
+                        last = e
+                        msg = str(e).lower()
+                        if attempt == 0 and ("stream not found" in msg or "connection closed" in msg or "hrana" in msg):
+                            self._reconnect()
+                            continue
+                        raise
+                raise last
             rows = await asyncio.to_thread(_run)
         return TursoResult(rows)
 
@@ -62,11 +83,7 @@ async def init_db() -> None:
         raise RuntimeError("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required.")
 
     # libsql uses HTTP under the hood — works with current Turso
-    conn = libsql.connect(
-        database=TURSO_DATABASE_URL,
-        auth_token=TURSO_AUTH_TOKEN,
-    )
-    db = TursoDB(conn)
+    db = TursoDB(_connect())
 
     await db.execute("""
         CREATE TABLE IF NOT EXISTS guild_config (

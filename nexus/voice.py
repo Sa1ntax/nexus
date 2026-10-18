@@ -204,7 +204,10 @@ class RoomSelect(discord.ui.Select):
             await ch.set_permissions(i.guild.default_role, overwrite=ow)
             await i.response.send_message("Комната видна.", ephemeral=True)
         elif v == "delete":
-            await ch.delete(reason="Владелец удалил комнату")
+            try:
+                await ch.delete(reason="Владелец удалил комнату")
+            except discord.NotFound:
+                pass
             active_rooms.pop(self.channel_id, None)
             await i.response.send_message("Комната удалена.", ephemeral=True)
 
@@ -383,6 +386,8 @@ def setup(bot: discord.Client):
                 log.info("Deleting empty room %s", ch.id)
                 try:
                     await ch.delete(reason="Комната пуста")
+                except discord.NotFound:
+                    pass
                 except discord.HTTPException:
                     log.exception("Failed to delete room %s", ch.id)
                 active_rooms.pop(ch.id, None)
